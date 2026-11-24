@@ -1,0 +1,11 @@
+services:
+  fire-detection:
+    build: .
+    ports: ["8000:8000"]
+    env_file: [.env]
+    volumes:
+      - ./data:/srv/data
+      - ./sources.json:/srv/sources.json
+      # mount local videos you want to analyse:
+      # - /path/to/videos:/videos:ro
+    restart: unless-stopped
