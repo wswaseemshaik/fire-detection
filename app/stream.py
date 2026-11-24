@@ -31,10 +31,9 @@ def _open(source: str) -> cv2.VideoCapture:
 
 
 class StreamReader:
-    def __init__(self, source: str, reconnect_delay: float = 3.0, loop_files: bool = True):
+    def __init__(self, source: str, settings):
         self.source = source
-        self.reconnect_delay = reconnect_delay
-        self.loop_files = loop_files
+        self.s = settings
         self.is_live = is_live_source(source)
 
         self._lock = threading.Lock()
@@ -49,6 +48,8 @@ class StreamReader:
         self.width = 0
         self.height = 0
         self.ended = False  # non-looping file reached EOF
+        self.progress: Optional[float] = None  # 0..1 for local files
+        self.total_frames = 0
 
     # -- lifecycle -----------------------------------------------------------
     def start(self) -> "StreamReader":
@@ -76,9 +77,9 @@ class StreamReader:
             if not cap.isOpened():
                 self.connected = False
                 self.last_error = "failed to open source"
-                log.warning("[%s] %s, retrying in %.0fs", self.source, self.last_error, self.reconnect_delay)
+                log.warning("[%s] %s, retrying in %.0fs", self.source, self.last_error, self.s.reconnect_delay)
                 cap.release()
-                self._stop.wait(self.reconnect_delay)
+                self._stop.wait(self.s.reconnect_delay)
                 continue
 
             self.fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
@@ -86,6 +87,7 @@ class StreamReader:
             self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             self.connected = True
             self.last_error = ""
+            self.total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0) if not self.is_live else 0
             log.info("[%s] opened %dx%d @ %.1f fps (live=%s)", self.source, self.width, self.height, self.fps, self.is_live)
 
             # Local files are paced to their native frame rate so they behave like a live feed.
@@ -97,7 +99,7 @@ class StreamReader:
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     if not self.is_live:
-                        if self.loop_files:
+                        if self.s.loop_files:
                             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                             ok, frame = cap.read()
                             if ok and frame is not None:
@@ -115,6 +117,8 @@ class StreamReader:
                     time.sleep(0.05)
                     continue
                 failures = 0
+                if self.total_frames > 0:
+                    self.progress = min(1.0, cap.get(cv2.CAP_PROP_POS_FRAMES) / self.total_frames)
                 self._publish(frame)
 
                 if frame_interval:
@@ -128,8 +132,8 @@ class StreamReader:
             cap.release()
             self.connected = False
             if not self._stop.is_set():
-                log.warning("[%s] disconnected (%s), reconnecting in %.0fs", self.source, self.last_error, self.reconnect_delay)
-                self._stop.wait(self.reconnect_delay)
+                log.warning("[%s] disconnected (%s), reconnecting in %.0fs", self.source, self.last_error, self.s.reconnect_delay)
+                self._stop.wait(self.s.reconnect_delay)
 
     def _publish(self, frame: np.ndarray) -> None:
         with self._lock:

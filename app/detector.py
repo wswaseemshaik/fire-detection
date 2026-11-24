@@ -30,25 +30,36 @@ class Detection:
 
 
 class Detector:
-    """Thread-safe wrapper; a single instance can be shared by every stream worker."""
+    """Thread-safe wrapper; a single instance is shared by every stream worker."""
 
     def __init__(self, weights: str, device: str = "cpu", conf: float = 0.35, iou: float = 0.5, imgsz: int = 640):
         self.model = YOLO(weights)
+        self.weights = weights
         self.device = device
         self.conf = conf
         self.iou = iou
         self.imgsz = imgsz
+        self.enabled_labels: set[str] | None = None  # None = all
         self.names = {int(k): str(v).lower() for k, v in self.model.names.items()}
         self._lock = threading.Lock()
+        self.inference_ms = 0.0
         log.info("loaded %s on %s, classes=%s", weights, device, self.names)
-        # warm-up so the first real frame isn't slow
-        self.detect(np.zeros((imgsz, imgsz, 3), dtype=np.uint8))
+        self.detect(np.zeros((imgsz, imgsz, 3), dtype=np.uint8))  # warm-up
+
+    def configure(self, conf: float | None = None, iou: float | None = None, imgsz: int | None = None,
+                  labels: set[str] | None = None) -> None:
+        if conf is not None: self.conf = conf
+        if iou is not None: self.iou = iou
+        if imgsz is not None: self.imgsz = imgsz
+        self.enabled_labels = labels
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
+        import time
+        t0 = time.perf_counter()
         with self._lock:
-            results = self.model.predict(
-                frame, conf=self.conf, iou=self.iou, imgsz=self.imgsz, device=self.device, verbose=False
-            )
+            results = self.model.predict(frame, conf=self.conf, iou=self.iou, imgsz=self.imgsz,
+                                         device=self.device, verbose=False)
+        self.inference_ms = (time.perf_counter() - t0) * 1000
         out: list[Detection] = []
         r = results[0]
         if r.boxes is None or len(r.boxes) == 0:
@@ -57,7 +68,10 @@ class Detector:
         confs = r.boxes.conf.cpu().numpy()
         clss = r.boxes.cls.cpu().numpy().astype(int)
         for (x1, y1, x2, y2), c, k in zip(xyxy, confs, clss):
-            out.append(Detection(self.names.get(k, str(k)), float(c), int(x1), int(y1), int(x2), int(y2)))
+            label = self.names.get(k, str(k))
+            if self.enabled_labels is not None and label not in self.enabled_labels:
+                continue
+            out.append(Detection(label, float(c), int(x1), int(y1), int(x2), int(y2)))
         return out
 
     @staticmethod

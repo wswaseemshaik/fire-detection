@@ -1,0 +1,13 @@
+{
+  "name": "fire-detection",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time fire & smoke detection on RTSP/RTMP/HTTP streams, local videos and folders",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/dev.mjs --build",
+    "start": "node scripts/dev.mjs --prod",
+    "test": "python3 -m pytest tests -q"
+  },
+  "engines": { "node": ">=18" }
+}

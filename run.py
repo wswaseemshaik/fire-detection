@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start the web dashboard + API."""
+"""Start the backend only (serves the built UI from frontend/dist if present). Prefer `npm run dev`."""
 import uvicorn
 
 from app.config import settings

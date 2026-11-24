@@ -41,8 +41,10 @@ def main() -> int:
     settings.detect_every = args.detect_every
     settings.loop_files = not args.no_loop
 
+    if args.webhook:
+        settings.webhook_url = args.webhook
     detector = Detector(args.weights, args.device, args.conf, settings.iou, args.imgsz)
-    bus = EventBus(settings.snapshot_dir, args.webhook)
+    bus = EventBus(settings)
     bus.subscribe(lambda e: print(f"\a>>> ALERT {e['labels']} conf={e['max_confidence']} snapshot={e['snapshot']}", flush=True))
     worker = SourceWorker(args.source, args.name, detector, bus, settings).start()
 

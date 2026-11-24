@@ -5,7 +5,7 @@ services:
     env_file: [.env]
     volumes:
       - ./data:/srv/data
-      - ./sources.json:/srv/sources.json
-      # mount local videos you want to analyse:
+      # mount folders with videos you want to browse from the UI:
       # - /path/to/videos:/videos:ro
+    # for a webcam: devices: ["/dev/video0:/dev/video0"]
     restart: unless-stopped
